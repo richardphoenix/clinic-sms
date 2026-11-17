@@ -112,10 +112,13 @@ uv run python repro/finding_1.py   # likewise finding_2.py ... finding_9.py
 
 Each prints what it observed and exits 1 while the finding still reproduces, 0 once it no longer does. Workarounds in the code are marked `# SDK-FINDING-<n>`.
 
+`repro/finding_10.py` to `finding_14.py` belong to the candidate findings of the text-channel spike ([docs/spikes/text-channel.md](docs/spikes/text-channel.md)), not yet in `docs/findings.md`. Same contract; `finding_13.py` and `finding_14.py` also need a local `livekit-server --dev`.
+
 ## Docs
 
 - [Design](docs/superpowers/specs/2026-11-12-clinic-sms-agent-design.md)
 - [Findings](docs/findings.md)
+- [Text-channel spike](docs/spikes/text-channel.md): RoomIO text input/output in a real room (`spikes/text_channel/`)
 
 ## License
 
