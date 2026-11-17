@@ -8,7 +8,7 @@ All messages are synthetic markers (`m1`, `slow`, `transfer`, ...). No phone num
 
 ## Summary
 
-| # | What was tried | Result | Candidate |
+| # | What was tried | Result | Finding |
 |---|---|---|---|
 | 1 | Five texts sent back to back | Varies per run: 1 reply or 4 separate replies (each blind to the rest of the burst); texts out of send order in the chat context in 6/8 runs | FINDING-12 |
 | 2 | A new text while a reply is streaming | Works as designed: the reply is cut and the new text answered | (note) |
@@ -22,7 +22,7 @@ All messages are synthetic markers (`m1`, `slow`, `transfer`, ...). No phone num
 | 10 | A text while the agent says something with `allow_interruptions=False` | **Dropped** (never in the chat context, never answered) | **FINDING-10** |
 | 11 | A text right after joining a room where the agent waits | **Dropped** ("participant not found") until the agent learns of the user, ~3 s on the dev server | FINDING-14 |
 
-Five candidates. Four are about a message that silently disappears. Three user texts (10, 11, 14) are dropped inside RoomIO, which logs a WARNING and discards the text whenever the text input callback raises or the sender is not yet known; the chat context never sees it, so neither the LLM nor anything downstream (history, transcripts, evals) can tell. One agent message (13) is never sent, yet the history records it as said. The fifth (12) loses nothing but scrambles a burst of texts. The two most worth reporting upstream are FINDING-11 and FINDING-10 (see the end). Both are now filed as one issue, [#8606](https://github.com/livekit/agents/issues/8606), with fix PR [#8607](https://github.com/livekit/agents/pull/8607).
+Five findings, now FINDING-10 to FINDING-14 in [docs/findings.md](../findings.md). Four are about a message that silently disappears. Three user texts (10, 11, 14) are dropped inside RoomIO, which logs a WARNING and discards the text whenever the text input callback raises or the sender is not yet known; the chat context never sees it, so neither the LLM nor anything downstream (history, transcripts, evals) can tell. One agent message (13) is never sent, yet the history records it as said. The fifth (12) loses nothing but scrambles a burst of texts. The two most worth reporting upstream are FINDING-11 and FINDING-10 (see the end). Both are now filed as one issue, [#8606](https://github.com/livekit/agents/issues/8606), with fix PR [#8607](https://github.com/livekit/agents/pull/8607).
 
 ## Setup
 
@@ -137,9 +137,9 @@ The agent starts a ~2 s reply with `allow_interruptions=False`; the user sends `
 
 Found while building FINDING-13's repro. The agent waits in the room; the user joins and sends a text 0.2 s or 1.0 s later: dropped with WARNING `participant not found, ignoring text input`, in 3/3 runs each. The agent links the user ~3 s after the join (the server delay above); a text sent after that is answered. See FINDING-14.
 
-## FINDING candidates
+## Findings
 
-Numbered after FINDING-9 of `docs/findings.md`, in that file's entry format. They are candidates: kept here, not yet in `docs/findings.md`. Each has a standalone repro in `repro/` with the same contract as the others (prints what it observed; exit 1 while it reproduces, 0 once it no longer does, 2 if a control fails). Line numbers refer to livekit-agents 1.8.11 as installed in `.venv`.
+The five entries are FINDING-10 to FINDING-14 in [docs/findings.md](../findings.md), moved there on 2026-11-17. The two notes below apply to all five. Each has a standalone repro in `repro/` with the same contract as the others (prints what it observed; exit 1 while it reproduces, 0 once it no longer does, 2 if a control fails). Line numbers refer to livekit-agents 1.8.11 as installed in `.venv`.
 
 ### Upstream search method
 
@@ -147,140 +147,7 @@ All searches 2026-11-17, read-only `gh search issues` and `gh search prs` with `
 
 ### Status on main
 
-Upstream `main` 0cfc030 (2026-11-17): `voice/room_io/types.py`, `voice/room_io/room_io.py`, `voice/room_io/_output.py` and `voice/speech_handle.py` are byte-for-byte identical to 1.8.11. `voice/agent_session.py` and `voice/agent_activity.py` differ, but not in the code cited below (only line numbers shift: on main, `generate_reply`'s activity choice is at agent_session.py:1678, the `_scheduling_paused = True` of a new activity at agent_activity.py:365, and the `cannot schedule new speech` raise at 2078–2082). FINDING-10, -11 and -12's repros were also run against the local upstream clone, whose `voice/` files that matter here (`agent_activity.py`, `agent_session.py`, `room_io/`, `speech_handle.py`) are identical to main 0cfc030: all three reproduce.
-
-### FINDING-10: A text that arrives while the agent says something with allow_interruptions=False is dropped
-
-- **Symptom**: with RoomIO's default text input, a user text that arrives while the current speech disallows interruptions is lost: it never enters the chat context and is never answered, now or after the speech. The only trace is a WARNING with a traceback (`failed to handle chat text stream`, `RuntimeError: This generation handle does not allow interruptions`). The same text sent after the speech is answered normally. With interruptions disabled for the whole session (`turn_handling=TurnHandlingOptions(interruption={"enabled": False})`), every reply is uninterruptible. Every text sent while the agent replies is then lost (checked on main 0cfc030).
-
-  For comparison, the voice path handles the same moment on purpose: by default it replaces the user's audio with silence while an uninterruptible speech plays (`discard_audio_if_uninterruptible=True`, `voice/turn.py` line 192; `voice/agent_activity.py` lines 1712–1718; the reason is echo), and if a user turn still completes it logs `skipping reply to user input, current speech generation cannot be interrupted` and skips only the reply, keeping the user message in the chat context when the audio was kept (`agent_activity.py` lines 2865–2880). So voice also does not answer such input; the difference is that the text path loses the message through an unhandled exception, whatever the settings, although typed text cannot be echo.
-- **Minimal repro**: `repro/finding_10.py`. Standalone, livekit-agents only, inline fake LLM, no key, no network. It calls the stock default callback (`TextInputOptions().text_input_cb`) the way RoomIO's `_read_text` does (same call, same `except`), while a 1 s reply with `allow_interruptions=False` streams; control: the same with `allow_interruptions=True`. Run `uv run python repro/finding_10.py`. Output (2026-11-17, identical across 3 runs):
-
-  ```
-  livekit-agents 1.8.11
-  locked   (allow_interruptions=False): {'dropped_with': 'RuntimeError: This generation handle does not allow interruptions', 'm1_in_history': False, 'm1_answered': False}
-  control  (allow_interruptions=True) : {'dropped_with': None, 'm1_in_history': True, 'm1_answered': True}
-  REPRODUCED: the default text input callback raised from session.interrupt(); RoomIO would log a WARNING and drop 'm1' (never in the chat context, never answered)
-  ```
-
-  End to end through a real room: spike scenario `locked` (above).
-- **SDK version**: livekit-agents 1.8.11 (PyPI), Python 3.13; also main 0cfc030 (see "Status on main").
-- **Root cause**:
-  - The default callback is `async with sess._claim_user_turn(): await sess.interrupt(); sess.generate_reply(user_input=ev.text)` (`voice/room_io/types.py` lines 46–49).
-  - `AgentSession.interrupt()` → `AgentActivity.interrupt()` calls `self._current_speech.interrupt(force=force)` without catching (`voice/agent_activity.py` lines 1963–1964); `SpeechHandle.interrupt()` raises `RuntimeError` when the handle disallows interruptions and `force` is False (`voice/speech_handle.py` lines 222–223). Queued speeches get a try/except and a warning (lines 1971–1982); the current one does not.
-  - So `generate_reply()` never runs, and the message was never added anywhere.
-  - RoomIO runs the callback in a task whose `except Exception` logs a WARNING and returns (`voice/room_io/room_io.py` lines 533–543). Nothing re-delivers the text.
-- **Classification**: SDK bug, with a design question attached. `interrupt()` behaves as documented ("Raises: RuntimeError: If the speech currently playing disallows interruptions and force is False"); the default callback built on it does not handle that case, so the message is lost through an exception path and a WARNING with a traceback, not through a decision. What the right behavior is (answer after the speech, or keep the message but skip the reply as voice does with the audio kept) is for upstream to choose; losing the message is not one of the voice path's outcomes for text that is not echo.
-- **Workaround**: none in this repo (the demo does not use RoomIO). In an app, use a custom `text_input_cb` that catches the RuntimeError from `interrupt()` and still calls `generate_reply()`. The reply then queues behind the uninterruptible speech. Checked on 1.8.11 and main: with such a callback, `repro/finding_10.py` prints NOT REPRODUCED, and the text is answered after the speech.
-- **Upstream status**: searched 2026-11-17 (read-only `gh search issues` / `gh search prs`, `--repo livekit/agents`). Terms (issues and PRs): `text_input_cb`, `failed to handle chat text stream`, `allow_interruptions text input`, `does not allow interruptions`, `text message dropped`, `text input ignored`, plus the broad sweeps (see "Upstream search method"). No issue or PR covers the text input path.
-  The closest: [#4443](https://github.com/livekit/agents/issues/4443) (open) has the same RuntimeError text, but from the voice path: `_user_turn_completed_task` interrupting an outdated reply that inherited `allow_interruptions=False`; its fix PRs [#6451](https://github.com/livekit/agents/pull/6451) and [#8419](https://github.com/livekit/agents/pull/8419) (both open) change only `agent_activity.py`'s user-turn path, not the text input callback. [#4780](https://github.com/livekit/agents/issues/4780) (closed; fixed by PR [#4807](https://github.com/livekit/agents/pull/4807), merged) is where the default callback came to `await sess.interrupt()`, the call that raises here. [#8041](https://github.com/livekit/agents/pull/8041) (open) rewrites the callback's last line (`await sess._reply_to_user_text(ev.text)`) but keeps `await sess.interrupt()` before it, so it does not change this. Filed 2026-11-17, with the user's approval, together with FINDING-11 as [#8606](https://github.com/livekit/agents/issues/8606). Fix PR [#8607](https://github.com/livekit/agents/pull/8607): the callback leaves an uninterruptible speech alone, and the reply queues behind it.
-
-### FINDING-11: A text that arrives during an agent handoff is dropped, and the old agent's reply is cut
-
-- **Symptom**: a tool returns a new agent; while the old agent is still answering the tool output (its activity draining) and until the new agent's activity has started, a user text is lost: not in the chat context, never answered. It also interrupts the old agent's reply, so the user sees a cut-off reply and then only the new agent's greeting. Logged: WARNING `failed to handle chat text stream` (`RuntimeError: cannot schedule new speech, the speech scheduling is draining/pausing, the speech will be cancelled`) and ERROR `Error in _llm_inference_task` (`RuntimeError: no activity context found, the agent is not running`). The window lasts as long as the old agent's post-tool reply: in the spike, every text sent 0.1–1.5 s after the user's `transfer` text, during a 2 s post-tool reply, was lost (3/3 at each of 4 delays).
-
-  For comparison, the voice path also drops a user turn that ends during a handoff, but on purpose. `on_end_of_turn` logs `skipping user input, speech scheduling is paused` and returns; it keeps the message only when the session is closing (`voice/agent_activity.py` lines 2727–2746). Next to that return sits `TODO(theomonnom): should we "forward" this new turn to the next agent/activity?` (line 2745). Nothing in the audio-activity interrupt checks for a handoff (lines 2375–2440), so user speech can cut the old agent's reply there too. The text path's outcome therefore matches voice's. The differences are that text gets there through an unhandled exception (a WARNING with a traceback plus a stray ERROR), and that voice's reasons for caution (echo, an uncertain end of turn) do not apply to typed text.
-- **Minimal repro**: `repro/finding_11.py`. Standalone, livekit-agents only, inline fake LLM, no key, no network. Old's tool returns `(New(), "moved")` and Old's reply to it streams for 2 s; `m2` is delivered through the stock default callback (RoomIO's `_read_text` minus the room) 0.1, 0.5, 1.0 and 1.5 s after `function_tools_executed`; control: after New's greeting. Run `uv run python repro/finding_11.py`. Output (2026-11-17; abridged: the d=0.5, 1.0 and 1.5 lines are identical to d=0.1):
-
-  ```
-  livekit-agents 1.8.11
-  in window, d=0.1 : {'dropped_with': 'RuntimeError: cannot schedule new speech, the speech scheduling is draining/pausing, the speech will be cancelled', 'm2_in_history': False, 'm2_answered': False, 'agent_after': 'New'}
-  in window, d=0.5 : {... same ...}
-  in window, d=1.0 : {... same ...}
-  in window, d=1.5 : {... same ...}
-  control (after greeting): {'dropped_with': None, 'm2_in_history': True, 'm2_answered': True, 'agent_after': 'New'}
-  REPRODUCED: 4/4 messages sent during the handoff were dropped (generate_reply raised; never in the chat context, never answered)
-  ```
-
-  End to end through a real room: spike scenarios `handoff` and `handoff_window` (above).
-- **SDK version**: livekit-agents 1.8.11 (PyPI), Python 3.13; also main 0cfc030.
-- **Root cause**: the mechanism is FINDING-3's root cause 2; the trigger is new.
-  - The default callback first awaits `sess.interrupt()` (`voice/room_io/types.py` line 48), which cuts the old agent's post-tool reply.
-  - It then calls `sess.generate_reply()`. Because the current activity is paused for the handoff, `generate_reply` targets `self._next_activity` (`voice/agent_session.py` line 1677). That activity has had `_scheduling_paused = True` since construction (`voice/agent_activity.py` line 357) and is only released when it starts after the old one has drained; `_schedule_speech` raises (lines 2036–2040). The pipeline task created just before the raise runs without an activity context, hence the ERROR.
-  - RoomIO logs the exception and drops the message (`voice/room_io/room_io.py` lines 533–543).
-  - Upstream fixed the same error for another source of speech: an async tool reply that lands during a handoff now waits for the paused activity to resume (PR [#7685](https://github.com/livekit/agents/pull/7685), merged 2026-10-23, for [#7632](https://github.com/livekit/agents/issues/7632)). The text input path has no such wait.
-- **Classification**: SDK bug in the text path, with a design question that upstream already has open. Voice drops a user turn during a handoff deliberately, with a warning, and a TODO asks whether to forward it instead. The text path reaches the same outcome through an exception, not a decision, and the app is not told. FINDING-3 classified "scheduling is refused during a handoff" as by design for early `run()` calls. Here, though, the caller is the SDK's own default callback. And since #7685, async tool replies wait out the handoff, which is the answer this spike would suggest for text.
-- **Workaround**: none in this repo. In an app, use a custom `text_input_cb` that, after `interrupt()`, waits while an activity switch is in flight before calling `generate_reply()`. Every switch, handoff or AgentTask, runs under the session's `_activity_lock`, held across the old activity's drain or pause and the new one's start. Checked on 1.8.11 and main: with such a callback, `repro/finding_11.py` prints NOT REPRODUCED. Waiting on the paused activity's `_scheduling_resumed` instead, as #7685 does for tool replies, stalls when the switch is into an AgentTask. The parent resumes only after the task completes, and the task may be waiting for this very text: in a test with the switch widened to 0.3 s, that version was still waiting after 4 s. Both waits use private attributes; there is no public signal (FINDING-3).
-- **Upstream status**: searched 2026-11-17. Terms: `text input handoff`, `lk.chat handoff`, `message lost handoff`, `cannot schedule new speech`, `user message during handoff`, `text input during handoff`, `chat message during agent transfer`, plus the broad sweeps. No issue or PR covers text input during a handoff.
-  Related but not the same: [#7632](https://github.com/livekit/agents/issues/7632) (closed) / PR [#7685](https://github.com/livekit/agents/pull/7685) (merged) and PR [#7633](https://github.com/livekit/agents/pull/7633) (open), the async-tool-reply case above; [#6313](https://github.com/livekit/agents/issues/6313) (closed) / PR [#6315](https://github.com/livekit/agents/pull/6315) (merged), `session.run()` during an AgentTask handoff (see FINDING-3). PR [#8041](https://github.com/livekit/agents/pull/8041) (open) replaces the callback's `generate_reply` with `_reply_to_user_text`. From its diff (not run): that also targets `_next_activity` and then, since it is still paused, logs `skipping reply to user input, speech scheduling is paused`, so the text would most likely still be lost, with a warning instead of an exception. Found in the pre-filing re-check, the same evening: PR [#6844](https://github.com/livekit/agents/pull/6844) (open since 2026-08-13, by another contributor) implements the voice TODO, passing a voice turn that completes during a handoff to the next activity. From its diff (not run), it does not touch the text callback, so case 2 is unchanged.
-- **Filed**: 2026-11-17, with the user's approval, together with FINDING-10 as [#8606](https://github.com/livekit/agents/issues/8606). Fix PR [#8607](https://github.com/livekit/agents/pull/8607), opened the same day at the user's request. It makes the default callback wait for the session's activity lock while a switch is in flight, and adds tests for a handoff and an AgentTask switch.
-
-### FINDING-12: Texts that arrive together are handled concurrently: out of order in the chat context, and either one reply or one reply per text, each blind to the rest
-
-- **Symptom**: texts that arrive together (a user typing several short messages, an SMS split in parts) are handled concurrently by the default text input, and the outcome varies run to run:
-  - their order in the chat context is often not the order they were sent (6 of 8 spike runs; e.g. `m1 m3 m4 m5 m2`), and the replies follow that order, so the conversation the LLM sees later is scrambled;
-  - either the last text interrupts everything before it and gets the only reply, or each text after the first gets its own reply, generated from the context before the burst plus that text alone: neither the other texts nor the other replies (spike: 4 replies in 6 of 8 runs, 1 reply in 2).
-
-  If the same texts are spaced further apart than one reply, each one interrupts the previous reply and the last reply sees everything in order.
-- **Minimal repro**: `repro/finding_12.py`. Standalone, livekit-agents only, inline fake LLM, no key, no network. Delivers `m1`, `m2`, `m3` through the stock default callback at once (one task each, as RoomIO does); control: one after another, each after the previous reply. In-process the outcome is stable: two replies, each blind to the other, and `m3` committed before `m2`. Run `uv run python repro/finding_12.py`. Output (2026-11-17, identical across 3 runs):
-
-  ```
-  livekit-agents 1.8.11
-  burst  : {'user_order_in_history': ['m1', 'm3', 'm2'], 'replies': ['got m3', 'got m2'], 'each_reply_saw': {'got m3': ['m1', 'm3'], 'got m2': ['m1', 'm2']}}
-  control: {'user_order_in_history': ['m1', 'm2', 'm3'], 'replies': ['got m1', 'got m2', 'got m3'], 'each_reply_saw': {'got m1': ['m1'], 'got m2': ['m1', 'm2'], 'got m3': ['m1', 'm2', 'm3']}}
-  REPRODUCED: the burst got 2 separate replies, 2 of them generated without the rest of the burst ['got m3', 'got m2']; user texts in the chat context in send order: False
-  ```
-
-  End to end through a real room: spike scenario `rapid` (the 8-run table above).
-
-- **SDK version**: livekit-agents 1.8.11 (PyPI), Python 3.13; also main 0cfc030.
-- **Root cause**:
-  - RoomIO starts one task per `lk.chat` stream (`voice/room_io/room_io.py` lines 533–547), so callbacks for texts that arrive together run concurrently.
-  - The default callback's `_claim_user_turn()` is a reentrant counter, not a lock (`voice/agent_session.py` lines 1742–1766), so it does not serialize them.
-  - When the texts land within the same few ticks, each callback's `await sess.interrupt()` runs before any of the others' `generate_reply()`: they all interrupt the first text's reply (the only speech that exists yet), wait for it, and then each schedules its own reply. Nothing interrupts those. When they land a little further apart, later callbacks interrupt the earlier replies instead, which gives the one-reply outcome.
-  - Each `generate_reply()` builds its request from the agent's chat context at that moment plus its own message (`voice/agent_activity.py` lines 1894–1900, `chat_ctx=chat_ctx or self._agent._chat_ctx`, `new_message=user_message`), and the user messages of the burst are committed only as their own replies run, so the requests miss each other.
-  - Nothing orders the callbacks: which one resumes first after the shared interrupt, and so which text is committed first, depends on task scheduling, not on arrival order. Over a real room the stream reads add their own jitter, hence the run-to-run variation.
-- **Classification**: SDK bug (a race in the default callback). The callback's evident intent is "the newest text supersedes the reply in flight"; with concurrent callbacks that intent holds only sometimes, and the other outcomes (a scrambled chat context; one reply per text, each blind to its siblings) are not ones an app would choose. On a text channel, where bursts are normal, it is visible to every user who types in short pieces.
-- **Workaround**: none in this repo (the demo answers one SMS per cold start and does not batch). In an app: a custom `text_input_cb` that serializes delivery (an `asyncio.Lock`) or debounces and joins texts that arrive within a short window into one user turn.
-- **Upstream status**: searched 2026-11-17. Terms: `multiple text messages`, `rapid text messages`, `consecutive messages`, `text input interrupt`, `concurrent text input`, `_claim_user_turn`, `multiple messages separate replies`, `debounce text input`, `batch text messages`, `text messages in a row`, plus the broad sweeps.
-  Nothing on bursts of text input. Related history: [#4780](https://github.com/livekit/agents/issues/4780) (closed; the interrupt was not awaited, so the next reply missed the cut message), PR [#5806](https://github.com/livekit/agents/pull/5806) (merged; added `claim_user_turn`, the counter the callback uses), [#8041](https://github.com/livekit/agents/pull/8041) (open; reroutes the callback's reply through `on_user_turn_completed`, no serialization).
-
-### FINDING-13: In a text-only room session, what the agent says before a participant is linked (e.g. the on_enter greeting) is never sent, yet recorded as said
-
-- **Symptom**: with audio output off, an agent that speaks before RoomIO has linked a participant (the standard greet-in-`on_enter` pattern, when the agent reaches the room before the user) produces text that reaches nobody. No warning; the speech completes normally and the history holds the message as an ordinary, not interrupted, assistant message, so the next LLM turn assumes the user has read it. Once a participant is linked, text works. Waiting for the participant first (`ctx.wait_for_participant()` before `session.start()`) avoids it. In voice the same greeting waits for the user to subscribe to the agent's audio.
-- **Minimal repro**: `repro/finding_13.py`. Needs `livekit-server --dev`; otherwise livekit-agents only, inline fake LLM, no key. The agent runs in-process (AgentSession + RoomIO, no worker): it greets in `on_enter`; the user joins 1 s later, then sends `m1`. Control: the user is in the room first. Run `uv run python repro/finding_13.py`. Output (2026-11-17, identical across 3 runs):
-
-  ```
-  livekit-agents 1.8.11
-  late join: {'user_received': ['got m1'], 'history_says_said': [('hello', False), ('got m1', False)], 'linked_participant_at_greeting': [None]}
-  control  : {'user_received': ['hello', 'got m1'], 'history_says_said': [('hello', False), ('got m1', False)], 'linked_participant_at_greeting': ['user']}
-  REPRODUCED: the greeting was produced before a participant was linked; it never reached the user, yet the history records it as said (not interrupted)
-  ```
-
-  End to end with the worker: spike scenario `greet` (`agent_first_default` lost it; `agent_first_wait_for_participant` and all user-first runs received it).
-- **SDK version**: livekit-agents 1.8.11 (PyPI), Python 3.13; also main 0cfc030 (`room_io.py` and `_output.py` identical).
-- **Root cause**:
-  - With no audio output, the agent's transcription output is a bare `_ParticipantTranscriptionOutput` with no `TranscriptSynchronizer` to pace it (`voice/room_io/room_io.py` lines 157–184).
-  - Its identity is set only after a participant is linked (`room_io.py` lines 390–392, in `_init_task` after `await self._participant_available_fut`).
-  - Until then `capture_text` returns immediately (`voice/room_io/_output.py` lines 789–791): no wait, no log, and the speech pipeline treats the text as delivered.
-  - The audio path waits instead: `_ParticipantAudioOutput.capture_frame` awaits the first subscription (`_output.py` lines 143–144), so a voice greeting is held until someone listens; with `sync_transcription` the text follows the audio.
-  - The stream is sent to the whole room at that moment, so text produced while the linked user is temporarily away is lost the same way (spike scenario 7).
-- **Classification**: SDK bug, of the silent kind: text-only mode drops agent output that voice mode would hold, and records it as delivered. Arguably "uncommon usage" when the app could wait for the participant first, but the SDK gives no sign, and the voice-first examples that greet in `on_enter` without waiting work in voice and fail silently in text.
-- **Workaround**: `await ctx.wait_for_participant()` (or `session.room_io.wait_for_ready()`) before the first proactive message. The demo is unaffected (no RoomIO).
-- **Upstream status**: searched 2026-11-17. Terms: `text only greeting`, `greeting not received text`, `transcription before participant`, `text output participant`, `text-only mode`, `wait_for_participant greeting`, `lk.transcription first message`, `greeting lost`, `on_enter greeting text`, `on_enter greeting`, `greeting text mode`, plus the broad sweeps. No issue or PR about RoomIO dropping agent text before a participant is linked.
-  Same symptom on another path: [#6577](https://github.com/livekit/agents/issues/6577) (open) / PR [#6578](https://github.com/livekit/agents/pull/6578) (open): `console --text` never shows agent-initiated messages such as the `on_enter` greeting, because the console renders only `session.run()` events. That fix is in `cli/_legacy.py` and does not touch RoomIO.
-
-### FINDING-14: A text sent right after joining a room where the agent is already waiting is dropped
-
-- **Symptom**: the agent is in the room (no participant linked yet); a user joins and sends a text before the agent has been told about that user. RoomIO drops it with WARNING `participant not found, ignoring text input`; it never enters the chat context. On livekit-server 1.13.11 `--dev` the agent learned of the user ~3 s after the join (2.95–3.0 s in every run), and texts sent at 0.2 s and 1.0 s were lost; a text sent after the link was answered.
-- **Minimal repro**: `repro/finding_14.py`. Needs `livekit-server --dev`; otherwise livekit-agents only, inline fake LLM, no key. Output (2026-11-17, identical across 3 runs):
-
-  ```
-  livekit-agents 1.8.11
-  early, sent 0.2 s after joining: {'agent_linked_user_after_s': 2.96, 'm0_in_history': False, 'm0_answered': False, 'warnings': ['participant not found, ignoring text input']}
-  early, sent 1.0 s after joining: {'agent_linked_user_after_s': 2.99, 'm0_in_history': False, 'm0_answered': False, 'warnings': ['participant not found, ignoring text input']}
-  control, sent once linked      : {'agent_linked_user_after_s': 3.31, 'm0_in_history': True, 'm0_answered': True, 'warnings': []}
-  REPRODUCED: the text sent [0.2, 1.0] s after joining was dropped ('participant not found, ignoring text input'); never in the chat context
-  ```
-
-- **SDK version**: livekit-agents 1.8.11 (PyPI), livekit rtc 1.2.0, livekit-server 1.13.11 (`--dev`), Python 3.13; RoomIO unchanged on main 0cfc030.
-- **Root cause**:
-  - `RoomIO._on_chat_text_stream` accepts any sender while no participant is linked (`voice/room_io/room_io.py` lines 516–519), then looks the sender up in `room.remote_participants` and drops the text if it is not there (lines 521–524).
-  - The text stream can arrive before the participant update that adds the sender to `remote_participants`; on the dev server the update came ~3 s after the join, the data at once.
-  - `TextInputEvent.participant` is already optional (`voice/room_io/types.py` lines 24–28), so the lookup is not needed to deliver the text.
-- **Classification**: SDK bug, with a server-dependent window. How long the window is in production (LiveKit Cloud, self-hosted non-dev) was not measured; on the dev server it is ~3 s, which is enough for a user who joins and types at once. In the worker flow where the user's token dispatches the agent, the user is already in the room when the agent starts, so this does not happen.
-- **Workaround**: none in this repo. Waiting on the client side for the agent to be visible does not help, since the user sees the agent at once while the agent does not yet see the user. In an app: turn off RoomIO's text input (`text_input=False`) and register an own `lk.chat` handler that does not require the sender in `remote_participants`; or have the client enable input only after a first message the agent sends once `session.room_io.wait_for_ready()` has returned.
-- **Upstream status**: searched 2026-11-17. Terms: `participant not found, ignoring text input`, `participant not found text input`, `participant not found`, `ignoring text input`, `text input before participant`, `first message ignored`, `first text message lost`, plus the broad sweeps. Nothing found.
+Upstream `main` 0cfc030 (2026-11-17): `voice/room_io/types.py`, `voice/room_io/room_io.py`, `voice/room_io/_output.py` and `voice/speech_handle.py` are byte-for-byte identical to 1.8.11. `voice/agent_session.py` and `voice/agent_activity.py` differ, but not in the code cited in the entries (only line numbers shift: on main, `generate_reply`'s activity choice is at agent_session.py:1678, the `_scheduling_paused = True` of a new activity at agent_activity.py:365, and the `cannot schedule new speech` raise at 2078–2082). FINDING-10, -11 and -12's repros were also run against the local upstream clone, whose `voice/` files that matter here (`agent_activity.py`, `agent_session.py`, `room_io/`, `speech_handle.py`) are identical to main 0cfc030: all three reproduce.
 
 ## Not filed
 

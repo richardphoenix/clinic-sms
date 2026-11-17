@@ -104,15 +104,15 @@ Author-run with real Claude, each on a fresh database (`uv run clinic-sms --db v
 
 ## SDK findings and repros
 
-Each finding in [docs/findings.md](docs/findings.md) (FINDING-1 to FINDING-9) has a self-contained repro script in `repro/` (livekit-agents only, plus livekit-plugins-anthropic for FINDING-9; no key, no network):
+Each finding in [docs/findings.md](docs/findings.md) (FINDING-1 to FINDING-14) has a self-contained repro script in `repro/` (livekit-agents only, plus livekit-plugins-anthropic for FINDING-9; no key; no network, except that `finding_13.py` and `finding_14.py` need a local `livekit-server --dev`):
 
 ```bash
-uv run python repro/finding_1.py   # likewise finding_2.py ... finding_9.py
+uv run python repro/finding_1.py   # likewise finding_2.py ... finding_14.py
 ```
 
 Each prints what it observed and exits 1 while the finding still reproduces, 0 once it no longer does. Workarounds in the code are marked `# SDK-FINDING-<n>`.
 
-`repro/finding_10.py` to `finding_14.py` belong to the candidate findings of the text-channel spike ([docs/spikes/text-channel.md](docs/spikes/text-channel.md)), not yet in `docs/findings.md`. Same contract; `finding_13.py` and `finding_14.py` also need a local `livekit-server --dev`.
+The index at the top of [docs/findings.md](docs/findings.md) shows where each one stands upstream, on livekit/agents and livekit/agents-js.
 
 ## Docs
 
