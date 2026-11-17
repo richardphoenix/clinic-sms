@@ -3,6 +3,8 @@ name = "clinic-sms"
 version = "0.1.0"
 description = "Simulated-SMS clinic agent on livekit-agents: per-message cold starts, a resumable TaskGroup intake, handoffs, background jobs and record/replay"
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [
     { name = "Richard" }
 ]

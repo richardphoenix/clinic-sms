@@ -116,3 +116,7 @@ Each prints what it observed and exits 1 while the finding still reproduces, 0 o
 
 - [Design](docs/superpowers/specs/2026-11-12-clinic-sms-agent-design.md)
 - [Findings](docs/findings.md)
+
+## License
+
+MIT; see [LICENSE](LICENSE).
