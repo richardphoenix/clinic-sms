@@ -1,0 +1,10 @@
+# Plan 1 intake end to end, with a mid-step restart, a regression and the summary (author-run smoke)
+/start-intake
+Aetna
+W123456789
+/restart
+Follow-up on my knee
+Actually my member ID is W999
+Aetna, W999
+Allergic to penicillin; I take ibuprofen
+/state

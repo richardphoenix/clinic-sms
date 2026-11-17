@@ -1,0 +1,10 @@
+# Reschedule smoke (author-run): reception -> reschedule -> intake -> back to reception
+I need to move my appointment to next week
+/restart
+The first one you listed works
+Aetna, member W123456789
+/restart
+Follow-up on my knee
+Allergic to penicillin; I take ibuprofen
+Thanks!
+/state

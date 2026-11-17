@@ -1,0 +1,5 @@
+# Reminder smoke (author-run): demo steps 1-3 up to the first intake question
+/advance 5m
+2, can I move it to next week?
+The first one works
+/state

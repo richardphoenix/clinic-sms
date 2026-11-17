@@ -1,0 +1,6 @@
+# Reception smoke (author-run): known patient texts first, restart, confirm
+What are your hours on Friday?
+/restart
+When is my appointment again?
+Please confirm it
+/state

@@ -1,0 +1,9 @@
+# Follow-up smoke (author-run): stop at 5 PM, restart, follow-up at 8 AM the next day
+/advance 7h5m
+/start-intake
+Aetna, member W123456789
+Follow-up on my knee
+/restart
+/advance 15h
+Allergic to penicillin; I take ibuprofen
+/state

@@ -1,0 +1,24 @@
+# Demo main line (spec §2.1), about 3 minutes
+# 1. the clinic texts first: the 48-hour reminder at 10:00 AM
+/advance 5m
+# 2. handoff to reschedule; the patient replies at 5:00 PM
+/advance 7h
+2, can I move it to next week?
+The first one works
+# 3. intake (TaskGroup): two answers, then silence
+Aetna, member W123456789
+Follow-up on my knee
+# 4. a real restart, then the next morning: the follow-up at 8:00 AM
+/restart
+/advance 15h
+# 5. regression to the insurance step
+Actually my member ID is wrong, it's W999
+Aetna, W999
+# 6. a billing question goes to the front desk, who answers hours later
+Also, why was I charged $40 last time?
+/advance 3h
+/as (555) 010-0100
+#1 That was your copay from your 10/2 visit. Nothing else is due.
+/as (555) 010-0001
+No allergies, and I take ibuprofen daily
+/state
